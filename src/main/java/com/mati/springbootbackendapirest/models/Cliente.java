@@ -28,12 +28,12 @@ public class Cliente implements Serializable {
     private Long id;
     
     @NotBlank(message = "No puede estar vacio")
-    @Size(min = 4, max=12, message = "Tiene que tener una longitud de 4 a 12 caracteres." )
+    @Size(min = 1, max=12, message = "Tiene que tener una longitud de 4 a 12 caracteres." )
     @Column(nullable = false)
     private String nombre;
 
     @NotBlank(message = "No puede estar vacio")
-    @Size(min = 4, max=12, message = "Tiene que tener una longitud de 4 a 12 caracteres.")
+    @Size(min = 1, max=12, message = "Tiene que tener una longitud de 4 a 12 caracteres.")
     private String apellido;
 
     @Column(nullable = false/* , unique = true */)
