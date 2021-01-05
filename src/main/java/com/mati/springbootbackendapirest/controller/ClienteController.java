@@ -1,27 +1,24 @@
 package com.mati.springbootbackendapirest.controller;
 
-import java.io.File;
+
 import java.io.IOException;
 import java.net.MalformedURLException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+
 import java.util.stream.Collectors;
 
 import javax.validation.Valid;
 
 import com.mati.springbootbackendapirest.models.Cliente;
 import com.mati.springbootbackendapirest.services.ClienteService;
+import com.mati.springbootbackendapirest.services.IUploadFileService;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -48,7 +45,8 @@ public class ClienteController {
 
     @Autowired
     private ClienteService clienteService;
-    private final Logger log = LoggerFactory.getLogger(ClienteController.class);
+    @Autowired
+    private IUploadFileService uploadService;
 
     @GetMapping("/clientes")
     public List<Cliente> index() {
@@ -79,7 +77,7 @@ public class ClienteController {
         }
 
         return new ResponseEntity<Cliente>(cliente, HttpStatus.OK);
-        /* return clienteService.findById(id); */
+
     }
 
     @PostMapping("/clientes")
@@ -154,20 +152,16 @@ public class ClienteController {
 
     @DeleteMapping("/clientes/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
-        Cliente clienteDelete = clienteService.findById(id);
+        
 
         Map<String, Object> response = new HashMap<>();
 
         try {
+            Cliente clienteDelete = clienteService.findById(id);
             String nombreFotoAnterior = clienteDelete.getFoto();
 
-            if (nombreFotoAnterior != null && nombreFotoAnterior.length() > 0) {
-                Path rutaFotoAnterior = Paths.get("uploads").resolve(nombreFotoAnterior).toAbsolutePath();
-                File archivoFotoAnterior = rutaFotoAnterior.toFile();
-                if (archivoFotoAnterior.exists() && archivoFotoAnterior.canRead()) {
-                    archivoFotoAnterior.delete();
-                }
-            }
+            uploadService.eliminar(nombreFotoAnterior);
+
 
             clienteService.delete(id);
 
@@ -176,7 +170,6 @@ public class ClienteController {
             return new ResponseEntity<Map<String, Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
         }
         response.put("mensaje", "El cliente a sido eliminado correctamente");
-        response.put("cliente", clienteDelete);
 
         return new ResponseEntity<Map<String, Object>>(response, HttpStatus.OK);
 
@@ -185,31 +178,24 @@ public class ClienteController {
     @PostMapping("/clientes/upload")
     public ResponseEntity<?> upload(@RequestParam("archivo") MultipartFile archivo, Long id) {
         Map<String, Object> response = new HashMap<>();
+        
         Cliente cliente = clienteService.findById(id);
 
         if (!archivo.isEmpty()) {
-            String nombreArchivo = UUID.randomUUID().toString() + "_" + archivo.getOriginalFilename().replace(" ", "");
-
-            Path rutaArchivo = Paths.get("uploads").resolve(nombreArchivo).toAbsolutePath();
-            log.info(rutaArchivo.toString());
-
+            
+            String nombreArchivo = null;
             try {
-                Files.copy(archivo.getInputStream(), rutaArchivo);
+               nombreArchivo =  uploadService.copiarImagen(archivo);
             } catch (IOException e) {
-                response.put("mensaje", "Error al subir la imagen del cliente" + nombreArchivo);
+                response.put("mensaje", "Error al subir la imagen del cliente");
 
                 return new ResponseEntity<Map<String, Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
             }
 
             String nombreFotoAnterior = cliente.getFoto();
 
-            if (nombreFotoAnterior != null && nombreFotoAnterior.length() > 0) {
-                Path rutaFotoAnterior = Paths.get("uploads").resolve(nombreFotoAnterior).toAbsolutePath();
-                File archivoFotoAnterior = rutaFotoAnterior.toFile();
-                if (archivoFotoAnterior.exists() && archivoFotoAnterior.canRead()) {
-                    archivoFotoAnterior.delete();
-                }
-            }
+            uploadService.eliminar(nombreFotoAnterior);
+        
             cliente.setFoto(nombreArchivo);
 
             clienteService.save(cliente);
@@ -225,29 +211,13 @@ public class ClienteController {
     @GetMapping("/uploads/img/{nombreFoto:.+}")
     public ResponseEntity<Resource> verFoto(@PathVariable String nombreFoto) {
 
-        Path rutaArchivo = Paths.get("uploads").resolve(nombreFoto).toAbsolutePath();
         Resource recurso = null;
-        log.info(rutaArchivo.toString());
+
         try {
-            recurso = new UrlResource(rutaArchivo.toUri());
+            recurso = uploadService.cargar(nombreFoto);
         } catch (MalformedURLException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
-
-        if(!recurso.exists() && !recurso.isReadable()){
-            rutaArchivo = Paths.get("src/main/resources/static/images").resolve("nouser.png").toAbsolutePath();
-            try {
-                recurso = new UrlResource(rutaArchivo.toUri());
-            } catch (MalformedURLException e) {
-     
-                e.printStackTrace();
-            }
-                
-            log.error("Error no se pudo cargar la imagen:" + nombreFoto);
-            
-        }
-
         HttpHeaders cabecera = new HttpHeaders();
         cabecera.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + recurso.getFilename() + "\"");
 
